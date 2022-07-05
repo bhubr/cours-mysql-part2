@@ -153,3 +153,122 @@ Si en cours de route vous obtenez une erreur liée à des dépendances non satis
 ```
 sudo apt --fix-broken install
 ```
+
+**À la fin du processus, on vous demandera de saisir un mot de passe `root` pour MySQL**, puis un mécanisme de chiffrement (garder l'option par défaut).
+
+#### Téléchargement et installation
+
+Commencez par télécharger le [**manuel** de XtraBackup](https://learn.percona.com/hubfs/Manuals/Percona_Xtra_Backup/Percona-XtraBackup-8.0/PerconaXtraBackup-8.0.28-21.pdf). Il offre des informations plus complètes que la section dédiée du livre _MySQL 8_ des éditions ENI.
+
+Puis créez un répertoire pour stocker les archives de XtraBackup : 
+
+```
+mkdir pxb-download && cd pxb-download
+```
+
+Téléchargez XtraBackup puis décompressez le bundle `.tar` :
+
+```
+wget https://downloads.percona.com/downloads/Percona-XtraBackup-LATEST/Percona-XtraBackup-8.0.28-21/binary/debian/bullseye/x86_64/Percona-XtraBackup-8.0.28-21-r78878e9b608-bullseye-x86_64-bundle.tar
+tar xvf Percona-XtraBackup-8.0.28-21-r78878e9b608-bullseye-x86_64-bundle.tar 
+```
+
+Installez les dépendances puis les paquets `.deb` extraits du `.tar`. Si en cours de route vous rencontrez une erreur, exécutez `sudo apt --fix-broken install`.
+
+```
+sudo apt install libdbd-mysql-perl libcurl4-openssl-dev libcurl4 libev4
+sudo dpkg -i percona-xtrabackup-80_8.0.28-21-1.bullseye_amd64.deb percona-xtrabackup-dbg-80_8.0.28-21-1.bullseye_amd64.deb percona-xtrabackup-test-80_8.0.28-21-1.bullseye_amd64.deb 
+```
+
+#### Téléchargement d'un programme d'exemple
+
+Pour démontrer les capacités de _hot backup_ (_online backup_ ou sauvegarde base ouverte) de PXB, nous allons utiliser un petit programme très basique, qui insère des lignes en continu dans une table.
+
+Retournez dans votre home directory : `cd`.
+
+Il est écrit en langage Go. Ces commandes vous permettront d'installer Go, Git, de télécharger le code source du programme, de le compiler :
+
+```
+sudo apt install -y golang git
+git clone https://github.com/bhubr/golang-mysql-example.git
+cd golang-mysql-example
+go build
+```
+
+Puis vous pourrez initialiser la BDD `testdb` utilisée par ce programme, et créer un utilisateur MySQL dédié, en exécutant un script d'initialisation :
+
+```
+mysql -uroot -p < init.sql
+```
+
+Enfin, vous pourrez exécuter le programme :
+
+```
+./mysql
+```
+
+Vous verrez des lignes semblables à celles-ci s'afficher :
+
+```
+inserted 00000000, affected: 1
+inserted 00000001, affected: 1
+inserted 00000002, affected: 1
+inserted 00000003, affected: 1
+inserted 00000004, affected: 1
+inserted 00000005, affected: 1
+...
+```
+
+**Laissez le programme fonctionner** et ouvrez une deuxième session SSH (une alternative serait d'utiliser un multiplexeur de terminaux comme `screen` ou `tmux`).
+
+#### Sauvegarde
+
+> Voir le chapitre 13 du [manuel de PXB](https://learn.percona.com/hubfs/Manuals/Percona_Xtra_Backup/Percona-XtraBackup-8.0/PerconaXtraBackup-8.0.28-21.pdf) pour un exemple complet de cycle de sauvegarde/restauration.
+
+Comme nous l'avions fait avant d'utiliser `mysqlbackup`, nous allons créer un utilisateur dédié à la sauvegarde via XtraBackup. Dans la console MySQL :
+
+```
+mysql> CREATE USER 'xbackup'@'localhost' IDENTIFIED BY 'MyPassword'; 
+mysql> GRANT BACKUP_ADMIN, RELOAD, LOCK TABLES, REPLICATION CLIENT, PROCESS ON *.* TO 'xbackup'@'localhost'; 
+mysql> GRANT SELECT ON performance_schema.log_status TO 'xbackup'@'localhost';
+mysql> GRANT SELECT ON performance_schema.keyring_component_status TO xbackup@'localhost';
+mysql> FLUSH PRIVILEGES;
+```
+
+Puis, une fois ressorti de la console MySQL : `sudo mkdir /opt/pxb-backups && sudo chown mysql:mysql /opt/pxb-backups`.
+
+Puis lancez la commande de backup (on vous demandera le mot de passe de l'utilisateur `xbackup`) :
+
+```
+sudo mkdir /opt/pxb-backups/full && sudo chown mysql:mysql /opt/pxb-backups/full
+sudo -u mysql xtrabackup --user=xbackup --password --backup --target-dir=/opt/pxb-backups/full/
+```
+
+**Cette commande sauvegardera toutes les bases**. Alternativement, on peut spécifier une liste de BDD, séparées par des espaces, entre quotes :
+
+```
+sudo mkdir /opt/pxb-backups/partial && sudo chown mysql:mysql /opt/pxb-backups/partial
+sudo -u mysql xtrabackup --user=xbackup --password --backup --databases='testdb' --target-dir=/opt/pxb-backups/partial/
+```
+
+> **Retournez dans la session où tourne le programme en Go** pour l'**interrompre** avec Ctrl-C.
+
+#### Restauration
+
+La restauration d'un backup se fait en deux étapes : une étape de "préparation", puis la restauration proprement dite.
+
+Si on devait restaurer toutes les bases sauvegardées dans `/opt/pxb-backups/full` vers une **nouvelle** installation de MySQL (ou en ayant supprimé le datadir de l'actuelle), on procéderait ainsi (serveur MySQL éteint) :
+
+```
+xtrabackup --prepare --target-dir=/opt/pxb-backups/full/
+sudo -u mysql xtrabackup --copy-back --target-dir=/opt/pxb-backups/full/ --datadir=/var/lib/mysql
+```
+
+#### Exercices
+
+Suivant le point où le groupe est rendu.
+
+* Suivez les instructions du chapitre 14 du manuel de PXB pour créer et restaurer des **backups incrémentaux** (vous aurez probablement besoin d'effacer la BDD sauvegardée si vous souhaitez la restaurer ensuite).
+* Suivez les instructions du chapitre 15 pour effectuer un backup compressé. Vous aurez besoin de l'outil `percona-release` dont les instructions de téléchargement/installation se trouvent ici : <https://docs.percona.com/percona-software-repositories/installing.html>
+
+
