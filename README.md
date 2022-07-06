@@ -153,7 +153,6 @@ sudo dpkg -i mysql-common_8.0.28-1debian10_amd64.deb \
   mysql-community-client_8.0.28-1debian10_amd64.deb \
   mysql-client_8.0.28-1debian10_amd64.deb \
   mysql-community-server-core_8.0.28-1debian10_amd64.deb \
-  mysql-community-server-core_8.0.28-1debian10_amd64.deb \
   mysql-community-server_8.0.28-1debian10_amd64.deb \
   mysql-server_8.0.28-1debian10_amd64.deb
 ```
