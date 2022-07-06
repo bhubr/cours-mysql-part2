@@ -66,7 +66,7 @@ ls -lh ~/mysql-backups
 
 **Ne sauvegarder qu'une base**
 
-On peut tout simplement spécifier le nom d'une base au lieu de `--all-databases`. Si on veut par exemple sauvegarder la base `testdb` :
+On peut tout simplement spécifier le nom d'une base au lieu de `--all-databases`. **C'est en général préférable**, car on peut obtenir un fichier `.sql` par base de données. Si on veut par exemple sauvegarder la base `testdb` :
 
 ```
 mysqldump -ubackup_user -p testdb > ~/mysql-backups/testdb.sql
@@ -88,6 +88,16 @@ Si on ne souhaite pas sauvegarder les requêtes de création des tables, on peut
 
 ```
 mysqldump -ubackup_user -p testdb --no-create-info > ~/mysql-backups/testdb-data.sql
+```
+
+#### Restaurer une BDD
+
+Pour restaurer une BDD à partir d'un dump, on va utiliser simplement le client `mysql`, en prenant comme entrée le fichier `.sql` généré via `mysqldump`.
+
+Par exemple, pour restaurer `testdb` : 
+
+```
+mysql -uroot -p testdb < ~/mysql-backups/testdb.sql
 ```
 
 #### Pour aller plus loin
